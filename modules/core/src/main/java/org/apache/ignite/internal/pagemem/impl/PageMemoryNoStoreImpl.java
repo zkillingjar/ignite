@@ -407,7 +407,7 @@ public class PageMemoryNoStoreImpl implements PageMemory {
             try {
                 int acquired = seg.acquiredPages();
 
-                assert acquired >= 0;
+                assert acquired >= 0: "acquired: " + acquired;
 
                 total += acquired;
             }

@@ -432,4 +432,13 @@ public interface GridQueryIndexing {
      * @throws IgniteCheckedException On bean registration error.
      */
     void registerMxBeans(IgniteMBeansManager mbMgr) throws IgniteCheckedException;
+
+    /**
+     * Removes rows that belong to specific data partitions from index.
+     *
+     * @param ctx Cache context.
+     * @param parts Partitions.
+     * @throws IgniteCheckedException If failed.
+     */
+    public void purgeIndexPartitions(GridCacheContext ctx, int[] parts) throws IgniteCheckedException;
 }

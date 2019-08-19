@@ -18,8 +18,11 @@
 package org.apache.ignite.internal.processors.query.h2.database;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -46,6 +49,8 @@ import org.apache.ignite.internal.processors.query.h2.opt.GridH2Table;
 import org.apache.ignite.internal.processors.query.h2.opt.H2Row;
 import org.apache.ignite.internal.processors.query.h2.opt.H2CacheRow;
 import org.apache.ignite.internal.metric.IoStatisticsHolder;
+import org.apache.ignite.internal.util.lang.GridCursor;
+import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.h2.result.SearchRow;
@@ -650,5 +655,48 @@ public class H2Tree extends BPlusTree<H2Row, H2Row> {
     /** {@inheritDoc} */
     @Override public String toString() {
         return S.toString(H2Tree.class, this, "super", super.toString());
+    }
+
+    /**
+     * Purge all rows with specific partitions from the index.
+     *
+     * @param parts Partitions.
+     */
+    public void purge(int[] parts) {
+        assert !F.isEmpty(parts) : "empty parts";
+
+        Set<Integer> set0 = new HashSet<>();
+        for (int p : parts)
+            set0.add(p);
+
+        final Set<Integer> set = Collections.unmodifiableSet(set0);
+
+        TreeRowClosure<H2Row, H2Row> rowClo = (tree, io, pageAddr, idx) -> {
+            long link = ((H2RowLinkIO)io).getLink(pageAddr,idx);
+
+            int partId = PageIdUtils.partId(link);
+
+            return set.contains(partId);
+        };
+
+        try {
+            GridCursor<Void> sweeper = sweep(rowClo);
+
+            while (sweeper.next()) {
+                cctx.shared().database().checkpointReadLock();
+                try {
+                    sweeper.get(); // Reuse cursor interface for now.
+                }
+                catch (IgniteCheckedException e) {
+                    throw U.convertException(e);
+                }
+                finally {
+                    cctx.shared().database().checkpointReadUnlock();
+                }
+            }
+        }
+        catch (IgniteCheckedException e) {
+            throw U.convertException(e);
+        }
     }
 }

@@ -172,6 +172,7 @@ import org.h2.api.ErrorCode;
 import org.h2.api.JavaObjectSerializer;
 import org.h2.engine.Session;
 import org.h2.engine.SysProperties;
+import org.h2.index.Index;
 import org.h2.table.IndexColumn;
 import org.h2.util.JdbcUtils;
 import org.jetbrains.annotations.Nullable;
@@ -2904,5 +2905,29 @@ public class IgniteH2Indexing implements GridQueryIndexing {
      */
     public LongRunningQueryManager longRunningQueries() {
         return longRunningQryMgr;
+    }
+
+    /** {@inheritDoc} */
+    public void purgeIndexPartitions(GridCacheContext cctx, int[] parts) throws IgniteCheckedException {
+        if (!cctx.group().persistenceEnabled())
+            return;
+
+        if (F.isEmpty(parts))
+            return;
+
+        IgnitePageStoreManager pageStore = cctx.shared().pageStore();
+
+        assert pageStore != null;
+
+        for (H2TableDescriptor tblDesc : schemaMgr.tablesForCache(cctx.name())) {
+            assert tblDesc.table() != null;
+
+            for (Index idx : tblDesc.table().getIndexes()) {
+                if (!(idx instanceof H2TreeIndex))
+                    continue;
+
+                ((H2TreeIndex)idx).purge(parts);
+            }
+        }
     }
 }

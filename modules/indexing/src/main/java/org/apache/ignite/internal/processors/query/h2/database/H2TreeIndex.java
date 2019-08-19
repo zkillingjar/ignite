@@ -68,6 +68,7 @@ import org.apache.ignite.internal.util.GridSpinBusyLock;
 import org.apache.ignite.internal.util.IgniteTree;
 import org.apache.ignite.internal.util.lang.GridCursor;
 import org.apache.ignite.internal.util.typedef.CIX2;
+import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteBiTuple;
 import org.apache.ignite.plugin.extensions.communication.Message;
@@ -906,5 +907,18 @@ public class H2TreeIndex extends H2TreeIndexBase {
         public List<InlineIndexHelper> inlineIdx() {
             return inlineIdx;
         }
+    }
+
+    /**
+     * Purge all rows with specific partitions from the index.
+     *
+     * @param parts Partitions.
+     */
+    public void purge(int[] parts) {
+        if (F.isEmpty(parts))
+            return;
+
+        for (int i = 0; i < segments.length; i++)
+            segments[i].purge(parts);
     }
 }

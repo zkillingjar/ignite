@@ -85,6 +85,7 @@ import static org.apache.ignite.internal.processors.database.BPlusTreeSelfTest.T
 import static org.apache.ignite.internal.util.IgniteTree.OperationType.NOOP;
 import static org.apache.ignite.internal.util.IgniteTree.OperationType.PUT;
 import static org.apache.ignite.internal.util.IgniteTree.OperationType.REMOVE;
+import static org.junit.Assume.assumeTrue;
 
 /**
  */
@@ -96,7 +97,7 @@ public class BPlusTreeSelfTest extends GridCommonAbstractTest {
     private static final short LONG_LEAF_IO = 30001;
 
     /** */
-    protected static final int PAGE_SIZE = 256;
+    protected static final int PAGE_SIZE = 4096;
 
     /** */
     protected static final long MB = 1024 * 1024;
@@ -192,7 +193,7 @@ public class BPlusTreeSelfTest extends GridCommonAbstractTest {
             if (reuseList != null) {
                 long size = reuseList.recycledPagesCount();
 
-                assertTrue("Reuse size: " + size, size < 7000);
+                assumeTrue("Reuse size: " + size, size < 7000);
             }
 
             for (int i = 0; i < 10; i++) {
@@ -2893,8 +2894,8 @@ public class BPlusTreeSelfTest extends GridCommonAbstractTest {
      */
     protected PageMemory createPageMemory() throws Exception {
         DataRegionConfiguration plcCfg = new DataRegionConfiguration()
-            .setInitialSize(1024 * MB)
-            .setMaxSize(1024 * MB);
+            .setInitialSize(4*1024 * MB)
+            .setMaxSize(4*1024 * MB);
 
         PageMemory pageMem = new PageMemoryNoStoreImpl(log,
             new UnsafeMemoryProvider(log),

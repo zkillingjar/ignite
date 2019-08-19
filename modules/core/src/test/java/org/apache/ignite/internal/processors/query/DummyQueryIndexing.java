@@ -311,4 +311,9 @@ public class DummyQueryIndexing implements GridQueryIndexing {
     @Override public void registerMxBeans(IgniteMBeansManager mbMgr) {
 
     }
+
+    /** {@inheritDoc} */
+    @Override public void purgeIndexPartitions(GridCacheContext ctx, int[] parts) throws IgniteCheckedException {
+
+    }
 }
