@@ -46,8 +46,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.function.Predicate;
 import org.apache.ignite.IgniteCheckedException;
+import org.apache.ignite.IgniteException;
 import org.apache.ignite.configuration.DataRegionConfiguration;
 import org.apache.ignite.failure.FailureContext;
+import org.apache.ignite.internal.IgniteFutureTimeoutCheckedException;
 import org.apache.ignite.internal.IgniteInternalFuture;
 import org.apache.ignite.internal.mem.unsafe.UnsafeMemoryProvider;
 import org.apache.ignite.internal.pagemem.FullPageId;
@@ -2683,6 +2685,56 @@ public class BPlusTreeSelfTest extends GridCommonAbstractTest {
         tree.validateTree();
 
         assertNoLocks();
+    }
+
+    /**
+     *
+     * @throws Exception If failed.
+     */
+    @Test
+    public void testConcurrentPutRemoveFailure() throws Exception {
+        MAX_PER_PAGE = 10;
+
+        TestTree t = createTestTree(true);
+
+        for (long k = 0L; k < 20; k++)
+            t.putx(k);
+
+        AtomicBoolean stop = new AtomicBoolean();
+
+        GridCompoundFuture fut = new GridCompoundFuture();
+
+        fut.add(GridTestUtils.runAsync(() -> {
+            try {
+                while (!stop.get())
+                    t.putx(11L);
+            }
+            catch (Exception e) {
+                throw new IgniteException(e);
+            }
+        }));
+
+        fut.add(GridTestUtils.runAsync(() -> {
+            try {
+                while (!stop.get())
+                    t.removex(11L);
+            }
+            catch (Exception e) {
+                throw new IgniteException(e);
+            }
+        }));
+
+        try {
+            fut.get(getTestTimeout() / 2);
+        }
+        catch (IgniteFutureTimeoutCheckedException e) {
+            // This is expected outcome, actually.
+        }
+        finally {
+            stop.set(true);
+        }
+
+        t.destroy();
     }
 
     /**
