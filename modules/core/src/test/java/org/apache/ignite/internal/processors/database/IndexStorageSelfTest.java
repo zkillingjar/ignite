@@ -18,11 +18,17 @@
 package org.apache.ignite.internal.processors.database;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.apache.ignite.configuration.DataRegionConfiguration;
 import org.apache.ignite.internal.mem.DirectMemoryProvider;
 import org.apache.ignite.internal.mem.file.MappedFileMemoryProvider;
@@ -30,12 +36,16 @@ import org.apache.ignite.internal.pagemem.FullPageId;
 import org.apache.ignite.internal.pagemem.PageIdAllocator;
 import org.apache.ignite.internal.pagemem.PageMemory;
 import org.apache.ignite.internal.pagemem.impl.PageMemoryNoStoreImpl;
+import org.apache.ignite.internal.processors.cache.persistence.IndexStorage;
 import org.apache.ignite.internal.processors.cache.persistence.IndexStorageImpl;
 import org.apache.ignite.internal.processors.cache.persistence.RootPage;
 import org.apache.ignite.internal.processors.metric.impl.LongAdderMetric;
+import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 import org.junit.Test;
+
+import static org.apache.ignite.internal.pagemem.PageIdUtils.MAX_PART_ID;
 
 /**
  *
@@ -64,6 +74,51 @@ public class IndexStorageSelfTest extends GridCommonAbstractTest {
     }
 
     /**
+     * @throws Exception if failed.
+     */
+    @Test
+    public void testIndexRebuildMarkers() throws Exception {
+        PageMemory mem = memory(true);
+
+        mem.start();
+
+        try {
+            IndexStorage idxStore = createMetaStorage("group".hashCode(), mem);
+
+            List<Integer> parts = IntStream.range(0, MAX_PART_ID).boxed().collect(Collectors.toList());
+
+            idxStore.storeIndexRebuildMarkers(DEFAULT_CACHE_NAME.hashCode(), parts, true);
+
+            Collections.shuffle(parts);
+
+            Set<Integer> partSet = new HashSet<>(parts);
+
+            int cnt = parts.size();
+
+            for (int idx = 0; idx < parts.size(); idx += cnt) {
+                cnt = Math.max(1, cnt / 2);
+
+                List<Integer> subList = parts.subList(idx, idx + cnt);
+
+                partSet.removeAll(subList);
+
+                idxStore.storeIndexRebuildMarkers(DEFAULT_CACHE_NAME.hashCode(), subList, false);
+
+                Set<Integer> res = idxStore.getIndexRebuildMarkers(DEFAULT_CACHE_NAME.hashCode());
+
+                assertEquals(partSet.size(), res.size());
+
+                assertTrue(F.eqNotOrdered(partSet, res));
+            }
+
+            assertTrue(F.isEmpty(idxStore.getIndexRebuildMarkers(DEFAULT_CACHE_NAME.hashCode())));
+        }
+        finally {
+            mem.stop(true);
+        }
+    }
+
+    /**
      * @throws Exception If failed.
      */
     private void metaAllocation() throws Exception {
@@ -76,7 +131,7 @@ public class IndexStorageSelfTest extends GridCommonAbstractTest {
         mem.start();
 
         try {
-            final Map<Integer, IndexStorageImpl> storeMap = new HashMap<>();
+            final Map<Integer, IndexStorage> storeMap = new HashMap<>();
 
             for (int i = 0; i < 1_000; i++) {
                 int cacheId = cacheIds[i % cacheIds.length];
@@ -95,23 +150,10 @@ public class IndexStorageSelfTest extends GridCommonAbstractTest {
                     idxName = randomName();
                 } while (idxMap.containsKey(idxName));
 
-                IndexStorageImpl metaStore = storeMap.get(cacheId);
+                IndexStorage metaStore = storeMap.get(cacheId);
 
                 if (metaStore == null) {
-                    metaStore = new IndexStorageImpl(
-                        mem,
-                        null,
-                        new AtomicLong(),
-                        cacheId,
-                        false,
-                        PageIdAllocator.INDEX_PARTITION,
-                        PageMemory.FLAG_IDX,
-                        null,
-                        mem.allocatePage(cacheId, PageIdAllocator.INDEX_PARTITION, PageMemory.FLAG_IDX),
-                        true,
-                        null,
-                        null
-                    );
+                    metaStore = createMetaStorage(cacheId, mem);
 
                     storeMap.put(cacheId, metaStore);
                 }
@@ -143,6 +185,33 @@ public class IndexStorageSelfTest extends GridCommonAbstractTest {
         finally {
             mem.stop(true);
         }
+    }
+
+    /**
+     *
+     * @param cacheId Cache ID.
+     * @param mem Page memory.
+     * @return Index storage.
+     * @throws Exception If failed.
+     */
+    private IndexStorage createMetaStorage(int cacheId, PageMemory mem) throws Exception {
+        return new IndexStorageImpl(
+            mem,
+            null,
+            new AtomicLong(),
+            cacheId,
+            false,
+            PageIdAllocator.INDEX_PARTITION,
+            PageMemory.FLAG_IDX,
+            null,
+            mem.allocatePage(cacheId, PageIdAllocator.INDEX_PARTITION, PageMemory.FLAG_IDX),
+            true,
+            mem.allocatePage(cacheId, PageIdAllocator.INDEX_PARTITION, PageMemory.FLAG_IDX),
+            true,
+            null,
+            null,
+            null
+        );
     }
 
     /**

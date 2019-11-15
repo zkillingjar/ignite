@@ -113,6 +113,7 @@ import org.apache.ignite.internal.pagemem.wal.record.MvccDataEntry;
 import org.apache.ignite.internal.pagemem.wal.record.MvccTxRecord;
 import org.apache.ignite.internal.pagemem.wal.record.PageSnapshot;
 import org.apache.ignite.internal.pagemem.wal.record.RollbackRecord;
+import org.apache.ignite.internal.pagemem.wal.record.StartBuildIndexRecord;
 import org.apache.ignite.internal.pagemem.wal.record.WALRecord;
 import org.apache.ignite.internal.pagemem.wal.record.WalRecordCacheGroupAware;
 import org.apache.ignite.internal.pagemem.wal.record.delta.PageDeltaRecord;
@@ -2887,6 +2888,24 @@ public class GridCacheDatabaseSharedManager extends IgniteCacheDatabaseSharedMan
                             }
 
                         }, pageDelta.groupId(), partId(pageDelta.pageId()), exec, semaphore);
+
+                        break;
+
+                    case START_BUILD_INDEX_RECORD:
+                        StartBuildIndexRecord startRec = (StartBuildIndexRecord)rec;
+
+                        if (skipRemovedIndexUpdates(startRec.groupId(), PageIdAllocator.INDEX_PARTITION))
+                            break;
+
+                        ctx = cctx.cache().cacheGroup(startRec.groupId());
+
+                        if (ctx != null && ctx.offheap() instanceof GridCacheOffheapManager) {
+                            IndexStorage idxStorage = ((GridCacheOffheapManager)ctx.offheap()).getIndexStorage();
+
+                            assert idxStorage != null;
+
+                            idxStorage.storeIndexRebuildMarkers(startRec.cacheId(), startRec.partIds(), true);
+                        }
 
                         break;
 
